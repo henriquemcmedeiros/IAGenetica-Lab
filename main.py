@@ -35,7 +35,7 @@ restricoes = {
 }
 
 dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
-horarios = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+horarios = [8, 9, 10, 11, 12, 13, 14, 15]
 
 # Funções
 def gerar_individuo():
@@ -45,7 +45,7 @@ def gerar_individuo():
           if len(cronograma[equipamento]) < restricoes[equipamento]:
               dia = random.choice(dias)
               horario = random.choice(horarios)
-              cronograma[equipamento].append((dia, horario, analise))
+              cronograma[equipamento].append([dia, horario, analise])
   return cronograma
 
 def calcular_fitness(cronograma):
@@ -58,11 +58,11 @@ def calcular_fitness(cronograma):
       for agendamento in agendamentos:
           dia, horario, _ = agendamento
           tempo_total += dias_da_semana[dia] * 24 + horario - 8  # Somatória de todos os tempos
-          if dia in dias:
-            num_analises_mesmo_dia += 1
-          dias.add(dia)
 
-  return tempo_total + num_analises_mesmo_dia * 10  # Penaliza análises no mesmo dia
+  penalizacao = 0
+  if checar_validade(cronograma):
+     penalizacao = 1
+  return tempo_total + penalizacao * 100
 
 def mutacao(individuo, taxa_mutacao):
   novo_individuo = individuo.copy()
@@ -85,7 +85,22 @@ def crossover(individuo1, individuo2):
 
   for equipamento, agendamentos in novo_individuo.items():
       if random.random() < TAXA_DE_CROSSOVER:
-        novo_individuo[equipamento] = individuo2[equipamento].copy()
+        agendamentoInd1 = random.choice(agendamentos)
+        agendamentoInd2 = random.choice(individuo2[equipamento])
+
+        if random.random() < 0.5:
+          aux = agendamentoInd1[0]
+          agendamentoInd1[0] = agendamentoInd2[0]
+          agendamentoInd2[0] = aux
+        else:
+          aux = agendamentoInd1[1]
+          agendamentoInd1[1] = agendamentoInd2[1]
+          agendamentoInd2[1] = aux
+
+        for i, elem in enumerate(novo_individuo[equipamento]):
+          if elem[2] == agendamentoInd1[2]:
+            novo_individuo[equipamento][i] = agendamentoInd1
+            break
   if (checar_validade(novo_individuo) and calcular_fitness(novo_individuo) < calcular_fitness(individuo1)):
     return novo_individuo
   else:
@@ -103,12 +118,13 @@ def checar_validade(individuo):
     for equipamento, agendamentos in individuo.items():
         dias_uso = {}
         for agendamento in agendamentos:
-            dia, _, analise = agendamento
+            dia, horario, analise = agendamento
             if dia not in dias_uso:
                 dias_uso[dia] = set()
-            dias_uso[dia].add(analise)
-        for dia, analises in dias_uso.items():
-            if len(analises) > restricoes[equipamento]:
+            dias_uso[dia].add((horario, analise))  # Armazena o horário e a análise
+
+        for dia, horarios_analises in dias_uso.items():
+            if len(horarios_analises) > restricoes[equipamento]:
                 return False
 
     # Verifica se uma análise não está em 2 equipamentos ao mesmo tempo
@@ -119,11 +135,42 @@ def checar_validade(individuo):
             if (dia, horario) not in horarios_analises:
                 horarios_analises[(dia, horario)] = set()
             horarios_analises[(dia, horario)].add(analise)
+
     for (dia, horario), analises in horarios_analises.items():
         if len(analises) > 1:
             return False
 
+    # Verifica se uma análise não está agendada em diferentes equipamentos ao mesmo tempo
+    equipamentos_analises = {}
+    for equipamento, agendamentos in individuo.items():
+        for agendamento in agendamentos:
+            dia, horario, analise = agendamento
+            if analise not in equipamentos_analises:
+                equipamentos_analises[analise] = set()
+            equipamentos_analises[analise].add(equipamento)
+
+    for analise, equipamentos in equipamentos_analises.items():
+        if len(equipamentos) > 1:
+            return False
+
+    # Verifica se uma análise não está agendada em diferentes equipamentos no mesmo dia e horário
+    dias_uso = {}
+    for equipamento, agendamentos in individuo.items():
+        for agendamento in agendamentos:
+            dia, horario, analise = agendamento
+            if dia not in dias_uso:
+                dias_uso[dia] = {}
+            if horario not in dias_uso[dia]:
+                dias_uso[dia][horario] = set()
+            dias_uso[dia][horario].add(analise)
+
+    for dia, horarios_analises in dias_uso.items():
+        for horario, analises in horarios_analises.items():
+            if len(analises) > 1:
+                return False
+
     return True
+
 
 def gerar_populacao_inicial(tamanho_populacao):
   return [gerar_individuo() for _ in range(tamanho_populacao)]
@@ -131,26 +178,28 @@ def gerar_populacao_inicial(tamanho_populacao):
 # Algoritmo genético
 populacao_atual = gerar_populacao_inicial(NUMERO_DE_INDIVIDUOS)
 menor_fitness = math.inf
-for i in range(NUMERO_DE_ITERACOES):
-  populacao_atual = [mutacao(individuo, TAXA_DE_SELECAO) for individuo in populacao_atual]
-  populacao_atual = [crossover(populacao_atual[i], populacao_atual[(i+1)%len(populacao_atual)]) for i in range(len(populacao_atual))]
+i = 0
 
-  # Aplica a seleção por tragédia após 2000 iterações
-  if i % ITERACOES_PARA_TRAGEDIA == 0 and i > 0:
-    populacao_atual = selecionar_melhores(populacao_atual, NUMERO_DE_INDIVIDUOS // 5)  # Mantém apenas os 5% melhores
-    # Regenera a população para manter o número de indivíduos constante
-    populacao_atual += gerar_populacao_inicial(NUMERO_DE_INDIVIDUOS - len(populacao_atual))
-    print(f"== SELEÇÃO POR TRAGÉDIA {i} ==")
+while menor_fitness > 16:
+    populacao_atual = [mutacao(individuo, TAXA_DE_SELECAO) for individuo in populacao_atual]
+    populacao_atual = [crossover(populacao_atual[i], populacao_atual[(i + 1) % len(populacao_atual)]) for i in range(len(populacao_atual))]
 
-  populacao_atual = selecionar_melhores(populacao_atual, NUMERO_DE_INDIVIDUOS)
+    # Aplica a seleção por tragédia após 2000 iterações
+    if i % ITERACOES_PARA_TRAGEDIA == 0 and i > 0:
+        populacao_atual = selecionar_melhores(populacao_atual, NUMERO_DE_INDIVIDUOS // 5)  # Mantém apenas os 5% melhores
+        # Regenera a população para manter o número de indivíduos constante
+        populacao_atual += gerar_populacao_inicial(NUMERO_DE_INDIVIDUOS - len(populacao_atual))
+        print(f"== SELEÇÃO POR TRAGÉDIA {i} ==")
 
-  melhor_individuo = populacao_atual[0]
-  if (calcular_fitness(melhor_individuo) < menor_fitness):
-    menor_fitness = calcular_fitness(melhor_individuo)
-    print(f"Melhor fitness: {menor_fitness} - Qtd. Iterações: {i} - Tempo médio: {menor_fitness/18:.2f}")
-    print(melhor_individuo)
+    populacao_atual = selecionar_melhores(populacao_atual, NUMERO_DE_INDIVIDUOS)
 
-  if (calcular_fitness(melhor_individuo) <= 16):
-    print(f"== ENCONTRADO! em {i} iterações com fitness de {menor_fitness} ==")
-    print(melhor_individuo)
-    break;
+    if calcular_fitness(populacao_atual[0]) < menor_fitness:
+      melhor_individuo = populacao_atual[0]
+      menor_fitness = calcular_fitness(melhor_individuo)
+      print(f"Melhor fitness: {menor_fitness} - Qtd. Iterações: {i} - Tempo médio: {menor_fitness / 18:.2f}")
+      #print(melhor_individuo)
+
+    i += 1
+
+print(f"== ENCONTRADO! EM {i} ITERAÇÕES COM FITNESS DE {menor_fitness} ==")
+print(melhor_individuo)
