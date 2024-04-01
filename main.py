@@ -60,8 +60,8 @@ def calcular_fitness(cronograma):
           tempo_total += dias_da_semana[dia] * 24 + horario - 8  # Somatória de todos os tempos
 
   penalizacao = 0
-  if checar_validade(cronograma):
-     penalizacao = 1
+  if not checar_validade(cronograma):
+    penalizacao = 1
   return tempo_total + penalizacao * 100
 
 def mutacao(individuo, taxa_mutacao):
@@ -114,62 +114,31 @@ def selecionar_melhores(populacao, n):
   return melhores
 
 def checar_validade(individuo):
-    # Verifica se cada equipamento não é usado mais do que sua capacidade máxima por dia
-    for equipamento, agendamentos in individuo.items():
-        dias_uso = {}
-        for agendamento in agendamentos:
-            dia, horario, analise = agendamento
-            if dia not in dias_uso:
-                dias_uso[dia] = set()
-            dias_uso[dia].add((horario, analise))  # Armazena o horário e a análise
+  for equipamento, agendamentos in individuo.items():
+    total_analises = sum(1 for _ in agendamentos)
+    if total_analises > restricoes.get(equipamento, 0):
+        return False
 
-        for dia, horarios_analises in dias_uso.items():
-            if len(horarios_analises) > restricoes[equipamento]:
-                return False
+  for _, agendamentos in individuo.items():
+    arrayData = []
+    for i in range(len(agendamentos)):
+      dia, hora, analise = agendamentos[i]
+      data = [dia, hora]
 
-    # Verifica se uma análise não está em 2 equipamentos ao mesmo tempo
-    horarios_analises = {}
-    for equipamento, agendamentos in individuo.items():
-        for agendamento in agendamentos:
-            dia, horario, analise = agendamento
-            if (dia, horario) not in horarios_analises:
-                horarios_analises[(dia, horario)] = set()
-            horarios_analises[(dia, horario)].add(analise)
+      if data in arrayData:
+        return False
+      else:
+        arrayData.append(data)
+  
+  array_agendamentos = []
+  for _, agendamentos in individuo.items():
+    for agendamento in agendamentos:
+      if agendamento in array_agendamentos:
+        return False
+      else:
+        array_agendamentos.append(agendamento)
 
-    for (dia, horario), analises in horarios_analises.items():
-        if len(analises) > 1:
-            return False
-
-    # Verifica se uma análise não está agendada em diferentes equipamentos ao mesmo tempo
-    equipamentos_analises = {}
-    for equipamento, agendamentos in individuo.items():
-        for agendamento in agendamentos:
-            dia, horario, analise = agendamento
-            if analise not in equipamentos_analises:
-                equipamentos_analises[analise] = set()
-            equipamentos_analises[analise].add(equipamento)
-
-    for analise, equipamentos in equipamentos_analises.items():
-        if len(equipamentos) > 1:
-            return False
-
-    # Verifica se uma análise não está agendada em diferentes equipamentos no mesmo dia e horário
-    dias_uso = {}
-    for equipamento, agendamentos in individuo.items():
-        for agendamento in agendamentos:
-            dia, horario, analise = agendamento
-            if dia not in dias_uso:
-                dias_uso[dia] = {}
-            if horario not in dias_uso[dia]:
-                dias_uso[dia][horario] = set()
-            dias_uso[dia][horario].add(analise)
-
-    for dia, horarios_analises in dias_uso.items():
-        for horario, analises in horarios_analises.items():
-            if len(analises) > 1:
-                return False
-
-    return True
+  return True
 
 
 def gerar_populacao_inicial(tamanho_populacao):
@@ -178,6 +147,7 @@ def gerar_populacao_inicial(tamanho_populacao):
 # Algoritmo genético
 populacao_atual = gerar_populacao_inicial(NUMERO_DE_INDIVIDUOS)
 menor_fitness = math.inf
+melhor_individuo = {}
 i = 0
 
 while menor_fitness > 16:
@@ -197,7 +167,7 @@ while menor_fitness > 16:
       melhor_individuo = populacao_atual[0]
       menor_fitness = calcular_fitness(melhor_individuo)
       print(f"Melhor fitness: {menor_fitness} - Qtd. Iterações: {i} - Tempo médio: {menor_fitness / 18:.2f}")
-      #print(melhor_individuo)
+      print(melhor_individuo)
 
     i += 1
 
