@@ -103,6 +103,12 @@ def selecionar_melhores(populacao, n):
   melhores = populacao_ordenada[:n]
   return melhores
 
+def selecao_tragedia(populacao, porcentagem):
+  populacao = selecionar_melhores(populacao, NUMERO_DE_INDIVIDUOS // porcentagem)
+  populacao += gerar_populacao_inicial(NUMERO_DE_INDIVIDUOS - len(populacao))
+  print(f"== SELEÇÃO POR TRAGÉDIA {i} ==")
+  return populacao
+
 def checar_validade(individuo):
   for equipamento, agendamentos in individuo.items():
     total_analises = sum(1 for _ in agendamentos)
@@ -145,9 +151,7 @@ while menor_fitness > 13:
 
     # Aplica a seleção por tragédia após 1000 iterações
     if i % ITERACOES_PARA_TRAGEDIA == 0 and i > 0:
-        populacao_atual = selecionar_melhores(populacao_atual, NUMERO_DE_INDIVIDUOS // 5)  # Mantém apenas os 5% melhores
-        populacao_atual += gerar_populacao_inicial(NUMERO_DE_INDIVIDUOS - len(populacao_atual))
-        print(f"== SELEÇÃO POR TRAGÉDIA {i} ==")
+      populacao_atual = selecao_tragedia(populacao_atual, 5)  # Mantém apenas os 5% melhores
 
     populacao_atual = selecionar_melhores(populacao_atual, NUMERO_DE_INDIVIDUOS)
 
